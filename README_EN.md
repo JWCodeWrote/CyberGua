@@ -87,8 +87,43 @@ Enhanced with AI-powered analysis using Ollama and Qwen models for deep metaphys
 - Python 3.10+
 - Node.js 18+
 - Ollama (Optional, for AI analysis)
+- Docker & Docker Compose (Optional, one-click deployment)
 
-### 1. Clone Repository
+### 🐳 Option 1: Docker One-Click Deployment (Recommended)
+
+The easiest way to deploy, one command starts all services:
+
+```bash
+# Clone repository
+git clone https://github.com/JWCodeWrote/CyberGua.git
+cd CyberGua
+
+# One-click start (first run will download AI model, takes a few minutes)
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
+```
+
+After startup, access:
+
+- 🌐 **Frontend**: http://localhost
+- 🔧 **Backend API**: http://localhost:8000
+- 🤖 **Ollama**: http://localhost:11434
+
+> 💡 First startup will automatically download `qwen2.5:1.5b` model (~1GB).  
+> For better AI quality, modify the model in `docker-compose.yml` to `qwen2.5:7b` or `qwen2.5:14b`.
+
+---
+
+### Option 2: Manual Deployment
+
+If not using Docker, you can manually deploy each service.
+
+#### 1. Clone Repository
 
 ```bash
 git clone https://github.com/JWCodeWrote/CyberGua.git
@@ -101,8 +136,8 @@ cd CyberGua
 cd backend
 python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
+pip3 install -r requirements.txt
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 Backend will run at: `http://localhost:8000`

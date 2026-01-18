@@ -61,4 +61,25 @@ export async function predictDetailed(params) {
   return response.data;
 }
 
+/**
+ * 追问 AI (基于卦象继续提问)
+ * @param {Object} params
+ * @param {string} params.question - 追问问题
+ * @param {Object} params.hexagram - 当前卦象信息
+ * @param {Object} [params.bazi] - 八字信息 (详细版)
+ * @param {Object} [params.fengshui] - 风水信息 (详细版)
+ * @param {Array} [params.history] - 对话历史
+ * @returns {Promise<Object>}
+ */
+export async function chatFollowup(params) {
+  const response = await api.post("/chat", {
+    question: params.question,
+    hexagram: params.hexagram,
+    bazi: params.bazi || null,
+    fengshui: params.fengshui || null,
+    history: params.history || [],
+  });
+  return response.data;
+}
+
 export default api;

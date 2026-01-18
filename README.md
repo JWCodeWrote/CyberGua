@@ -85,27 +85,70 @@
 - Python 3.10+
 - Node.js 18+
 - Ollama（可选，用于 AI 分析）
+- Docker & Docker Compose（可选，一键部署）
 
-### 1. 克隆项目
+### 🐳 方式一：Docker 一键部署（推荐）
+
+最简单的部署方式，一条命令启动所有服务：
+
+```bash
+# 克隆项目
+git clone https://github.com/JWCodeWrote/CyberGua.git
+cd CyberGua
+
+# 一键启动（首次启动会自动下载 AI 模型，需要几分钟）
+docker compose up -d
+
+# 查看日志
+docker compose logs -f
+
+# 停止服务
+docker compose down
+```
+
+启动后访问：
+
+- 🌐 **前端**: http://localhost
+- 🔧 **后端 API**: http://localhost:8000
+- 🤖 **Ollama**: http://localhost:11434
+
+> 💡 首次启动会自动下载 `qwen2.5:1.5b` 模型（约 1GB）。  
+> 如需更高质量的 AI 分析，可修改 `docker-compose.yml` 中的模型为 `qwen2.5:7b` 或 `qwen2.5:14b`。
+
+---
+
+### 方式二：手动部署
+
+如果不使用 Docker，可以手动部署各个服务。
+
+#### 1. 克隆项目
 
 ```bash
 git clone https://github.com/JWCodeWrote/CyberGua.git
 cd CyberGua
 ```
 
-### 2. 启动后端
+#### 2. 启动后端
 
 ```bash
 cd backend
+
+# 创建虚拟环境
 python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
+
+# 激活虚拟环境（必须执行！）
+source venv/bin/activate    # Windows 用户请运行: venv\Scripts\activate
+
+# 安装依赖
+pip3 install -r requirements.txt
+
+# 启动后端服务
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 后端将运行在：`http://localhost:8000`
 
-### 3. 启动前端
+#### 3. 启动前端
 
 ```bash
 cd frontend
@@ -115,7 +158,7 @@ npm run dev
 
 前端将运行在：`http://localhost:5173`
 
-### 4. (可选) 启动 AI 服务
+#### 4. (可选) 启动 AI 服务
 
 #### 🍎 macOS 用户
 

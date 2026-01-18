@@ -1,9 +1,10 @@
 <script setup>
 /**
  * 结果展示组件
- * 显示占卜结果和 AI 分析
+ * 显示占卜结果和 AI 分析，支持追问功能
  */
-import { computed } from "vue";
+import { ref, computed } from "vue";
+import { chatFollowup } from "../api";
 
 const props = defineProps({
   result: Object,
@@ -11,6 +12,12 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["restart", "home"]);
+
+// 追问相关状态
+const followupQuestion = ref("");
+const chatHistory = ref([]);
+const isAsking = ref(false);
+const chatError = ref("");
 
 // 是否有有效结果
 const hasResult = computed(() => {
@@ -30,6 +37,69 @@ const fengshui = computed(() => props.result?.fengshui || {});
 const aiAnalysis = computed(() => {
   return props.result?.ai_analysis || props.result?.ai_report || "暂无 AI 分析";
 });
+
+// 发送追问
+async function askFollowup() {
+  if (!followupQuestion.value.trim() || isAsking.value) return;
+
+  const question = followupQuestion.value.trim();
+  followupQuestion.value = "";
+  chatError.value = "";
+  isAsking.value = true;
+
+  // 添加用户问题到历史
+  chatHistory.value.push({
+    role: "user",
+    content: question,
+  });
+
+  try {
+    const response = await chatFollowup({
+      question,
+      hexagram: hexagram.value,
+      bazi: props.mode === "detailed" ? bazi.value : null,
+      fengshui: props.mode === "detailed" ? fengshui.value : null,
+      history: chatHistory.value.slice(0, -1), // 不包含当前问题
+    });
+
+    if (response.success) {
+      chatHistory.value.push({
+        role: "assistant",
+        content: response.answer,
+        context: response.context,
+      });
+    } else {
+      chatError.value = response.error || "AI 暂时不可用";
+      chatHistory.value.push({
+        role: "assistant",
+        content: `⚠️ ${response.error || "AI 暂时不可用"}`,
+        isError: true,
+      });
+    }
+  } catch (e) {
+    chatError.value = e.response?.data?.detail || "请求失败";
+    chatHistory.value.push({
+      role: "assistant",
+      content: `⚠️ 请求失败: ${chatError.value}`,
+      isError: true,
+    });
+  } finally {
+    isAsking.value = false;
+  }
+}
+
+// 快捷问题
+const quickQuestions = [
+  "这个卦象的变化趋势如何？",
+  "应该注意什么？",
+  "什么时候行动最好？",
+  "有什么化解方法？",
+];
+
+function askQuickQuestion(q) {
+  followupQuestion.value = q;
+  askFollowup();
+}
 </script>
 
 <template>
@@ -228,6 +298,86 @@ const aiAnalysis = computed(() => {
             >{{ aiAnalysis }}</pre
           >
         </div>
+      </div>
+
+      <!-- 追问对话区 -->
+      <div class="gua-card rounded-2xl p-6 mb-6">
+        <h3 class="text-lg font-bold text-primary mb-4">💬 继续追问</h3>
+
+        <!-- 对话历史 -->
+        <div
+          v-if="chatHistory.length > 0"
+          class="space-y-4 mb-4 max-h-80 overflow-y-auto"
+        >
+          <div
+            v-for="(msg, index) in chatHistory"
+            :key="index"
+            class="flex"
+            :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+          >
+            <div
+              class="max-w-[85%] rounded-2xl px-4 py-2"
+              :class="
+                msg.role === 'user'
+                  ? 'bg-primary text-primary-content'
+                  : msg.isError
+                    ? 'bg-error/20 text-error'
+                    : 'bg-base-300/50 text-base-content'
+              "
+            >
+              <pre class="whitespace-pre-wrap font-sans text-sm m-0">{{
+                msg.content
+              }}</pre>
+            </div>
+          </div>
+
+          <!-- 加载中 -->
+          <div v-if="isAsking" class="flex justify-start">
+            <div class="bg-base-300/50 rounded-2xl px-4 py-2">
+              <span class="loading loading-dots loading-sm"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 快捷问题 -->
+        <div v-if="chatHistory.length === 0" class="flex flex-wrap gap-2 mb-4">
+          <button
+            v-for="q in quickQuestions"
+            :key="q"
+            @click="askQuickQuestion(q)"
+            class="btn btn-sm btn-outline btn-primary"
+            :disabled="isAsking"
+          >
+            {{ q }}
+          </button>
+        </div>
+
+        <!-- 输入框 -->
+        <div class="flex gap-2">
+          <input
+            type="text"
+            v-model="followupQuestion"
+            @keyup.enter="askFollowup"
+            placeholder="输入您的追问..."
+            class="input input-bordered input-primary flex-1"
+            :disabled="isAsking"
+          />
+          <button
+            @click="askFollowup"
+            class="btn btn-primary"
+            :disabled="isAsking || !followupQuestion.trim()"
+          >
+            <span
+              v-if="isAsking"
+              class="loading loading-spinner loading-sm"
+            ></span>
+            <span v-else>发送</span>
+          </button>
+        </div>
+
+        <p class="text-xs text-base-content/40 mt-2">
+          💡 AI 会结合卦象信息和网络搜索结果回答您的问题
+        </p>
       </div>
 
       <!-- 操作按钮 -->

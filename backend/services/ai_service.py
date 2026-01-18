@@ -5,17 +5,29 @@ AI 服务模块 (AI Service)
 - 组合 Prompt
 - 调用 Ollama API
 - 生成简单版/详细版分析报告
+- 自动检测可用模型
 """
 
 import httpx
 from dataclasses import dataclass
-from typing import Optional, AsyncGenerator
+from typing import Optional, List
 import json
+import os
 
 
-# Ollama 配置
-OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "qwen2.5:14b"
+# Ollama 配置 (支持环境变量，方便 Docker 部署)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+
+# 优先级排序的模型列表 (从最佳到最快)
+PREFERRED_MODELS = [
+    "qwen2.5:14b",   # 最佳质量
+    "qwen2.5:7b",    # 平衡
+    "qwen2.5:1.5b",  # 最快
+    "qwen2.5:3b",    # 备选
+    "qwen2.5:0.5b",  # 最小
+]
+
+DEFAULT_MODEL = "qwen2.5:1.5b"  # 默认回退模型
 
 
 @dataclass
@@ -33,7 +45,7 @@ class AIService:
     def __init__(
         self,
         base_url: str = OLLAMA_BASE_URL,
-        model: str = DEFAULT_MODEL,
+        model: str = None,  # None 表示自动检测
         timeout: float = 120.0,
     ):
         """
@@ -41,19 +53,68 @@ class AIService:
 
         Args:
             base_url: Ollama API 地址
-            model: 使用的模型名称
+            model: 使用的模型名称 (None 则自动检测)
             timeout: 请求超时时间 (秒)
         """
         self.base_url = base_url
-        self.model = model
+        self._model = model
         self.timeout = timeout
+        self._detected_model = None
 
-    async def check_health(self) -> bool:
-        """检查 Ollama 服务是否可用"""
+    @property
+    def model(self) -> str:
+        """获取当前使用的模型名称"""
+        if self._model:
+            return self._model
+        if self._detected_model:
+            return self._detected_model
+        return DEFAULT_MODEL
+
+    async def detect_best_model(self) -> Optional[str]:
+        """
+        自动检测已安装的最佳 Qwen 模型
+        
+        Returns:
+            最佳可用模型名称，如果没有则返回 None
+        """
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{self.base_url}/api/tags")
-                return response.status_code == 200
+                if response.status_code != 200:
+                    return None
+                
+                data = response.json()
+                installed_models = [m.get("name", "") for m in data.get("models", [])]
+                
+                # 按优先级查找最佳模型
+                for preferred in PREFERRED_MODELS:
+                    if preferred in installed_models:
+                        self._detected_model = preferred
+                        print(f"[AI] 自动检测到模型: {preferred}")
+                        return preferred
+                
+                # 如果没有找到优先模型，查找任何 qwen 模型
+                for model in installed_models:
+                    if "qwen" in model.lower():
+                        self._detected_model = model
+                        print(f"[AI] 使用已安装的模型: {model}")
+                        return model
+                
+                return None
+        except Exception as e:
+            print(f"[AI] 模型检测失败: {e}")
+            return None
+
+    async def check_health(self) -> bool:
+        """检查 Ollama 服务是否可用，并自动检测模型"""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                if response.status_code == 200:
+                    # 顺便检测最佳模型
+                    await self.detect_best_model()
+                    return True
+                return False
         except Exception:
             return False
 

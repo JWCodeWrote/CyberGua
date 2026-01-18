@@ -220,6 +220,115 @@ async def predict_detailed(request: DetailedRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ChatRequest(BaseModel):
+    """追问请求"""
+    question: str = Field(..., min_length=1, max_length=500, description="追问问题")
+    hexagram: dict = Field(..., description="当前卦象信息")
+    bazi: Optional[dict] = Field(None, description="八字信息 (详细版)")
+    fengshui: Optional[dict] = Field(None, description="风水信息 (详细版)")
+    history: list[dict] = Field(default=[], description="对话历史")
+
+
+class ChatResponse(BaseModel):
+    """追问响应"""
+    answer: str
+    context: Optional[dict] = None
+    success: bool
+    error: Optional[str] = None
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat_followup(request: ChatRequest):
+    """
+    追问 AI
+    
+    基于当前卦象继续向 AI 提问，支持大数据搜索
+    """
+    try:
+        # 1. 搜索相关大数据
+        context_result = crawler.search(request.question)
+        context_dict = crawler.to_dict(context_result)
+        
+        # 2. 构建追问 Prompt
+        system = """你是一位精通梅花易数、八字命理和风水学的资深命理师。
+用户已经完成了起卦，现在基于卦象结果向你追问。
+请结合卦象信息和网络搜索的最新资讯，给出专业且实用的回答。
+回答要简洁有力，控制在 300 字以内。"""
+
+        # 格式化卦象信息
+        hexagram = request.hexagram
+        hex_info = f"""【当前卦象】
+本卦：{hexagram.get('original', {}).get('name', '未知')}
+变卦：{hexagram.get('changed', {}).get('name', '未知')}
+体用关系：{hexagram.get('ti_yong_relation', '未知')}
+初步判断：{hexagram.get('interpretation', '')}"""
+
+        # 如果有八字信息
+        bazi_info = ""
+        if request.bazi:
+            four_pillars = request.bazi.get("four_pillars", {})
+            bazi_info = f"""
+【八字信息】
+四柱：{four_pillars.get('year', '')} {four_pillars.get('month', '')} {four_pillars.get('day', '')} {four_pillars.get('hour', '')}
+日主：{request.bazi.get('day_master', '')}（{request.bazi.get('strength', '')}）
+喜用神：{'、'.join(request.bazi.get('favorable_elements', []))}"""
+
+        # 如果有风水信息
+        fengshui_info = ""
+        if request.fengshui:
+            ming_gua = request.fengshui.get("ming_gua", {})
+            flying = request.fengshui.get("flying_stars", {})
+            fengshui_info = f"""
+【风水信息】
+本命卦：{ming_gua.get('gua_name', '')}
+吉方：{'、'.join(ming_gua.get('favorable_directions', []))}
+流年财位：{flying.get('wealth_position', '')}"""
+
+        # 格式化对话历史
+        history_str = ""
+        if request.history:
+            history_str = "\n【之前的对话】\n"
+            for h in request.history[-5:]:  # 只保留最近5条
+                role = "用户" if h.get("role") == "user" else "大师"
+                history_str += f"{role}：{h.get('content', '')}\n"
+
+        # 组合用户消息
+        user_msg = f"""{hex_info}
+{bazi_info}
+{fengshui_info}
+{history_str}
+【网络搜索参考】
+{context_result.summary}
+
+【用户追问】
+{request.question}
+
+请结合以上信息回答用户的问题。"""
+
+        # 构建完整 prompt
+        prompt = f"<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{user_msg}<|im_end|>\n<|im_start|>assistant\n"
+        
+        # 3. 调用 AI
+        ai_response = await ai.generate(prompt)
+        
+        if not ai_response.success:
+            return ChatResponse(
+                answer=f"AI 暂时不可用: {ai_response.error}",
+                context=context_dict,
+                success=False,
+                error=ai_response.error,
+            )
+        
+        return ChatResponse(
+            answer=ai_response.content,
+            context=context_dict,
+            success=True,
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== 启动入口 ====================
 
 if __name__ == "__main__":
