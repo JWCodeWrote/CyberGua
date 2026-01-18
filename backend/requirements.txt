@@ -1,0 +1,19 @@
+# 赛博玄学后端依赖
+# FastAPI 框架
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# 数据验证
+pydantic>=2.5.0
+
+# 农历/八字计算
+lunar_python>=1.3.0
+
+# 外应搜索
+duckduckgo_search>=4.1.0
+
+# HTTP 客户端 (调用 Ollama)
+httpx>=0.26.0
+
+# 异步支持
+anyio>=4.2.0
